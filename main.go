@@ -72,8 +72,12 @@ func main() {
 					item := *q.Items
 					item[i].LastTry = time.Now()
 					item[i].Retries = item[i].Retries + 1
-					item[i].Sent = true
-					submit(&request)
+
+					error := submit(&request)
+					if error != nil {
+						item[i].Sent = true
+
+					}
 				}
 			}
 			q.Recompose()
@@ -132,7 +136,7 @@ func main() {
 	log.Fatalln(http.ListenAndServe(":8080", r))
 }
 
-func submit(req *DeferredRequest) {
+func submit(req *DeferredRequest) error {
 	gatewayURL := "http://gateway:8080"
 	if val, exists := os.LookupEnv("gateway_url"); exists {
 		gatewayURL = val
@@ -151,9 +155,13 @@ func submit(req *DeferredRequest) {
 	response, err := c.Do(request)
 	if err != nil {
 		log.Printf("Cannot retry %T\n", req)
+		return err
+	} else if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("unexpected status from gateway: %s", response.Status)
 	}
 
 	log.Printf("Posting to %s, status: %s", URI, response.Status)
+	return nil
 }
 
 type DeferredRequest struct {
