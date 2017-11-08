@@ -1,0 +1,9 @@
+provider:
+  name: faas
+  gateway: http://localhost:8080
+
+functions:
+  bin:
+    lang: python
+    handler: ./bin
+    image: bin
