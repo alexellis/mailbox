@@ -44,18 +44,19 @@ func NewWorkQueue() WorkQueue {
 }
 
 func main() {
-	req := DeferredRequest{
-		Function:     "bin",
-		Query:        "post=true",
-		Retries:      0,
-		MaxRetries:   1,
-		RestartDelay: time.Second * 4,
-		Body:         []byte("body data here."),
-		LastTry:      time.Now(),
-	}
-
 	q := NewWorkQueue()
-	q.Add(req)
+
+	// sample work item.
+	// req := DeferredRequest{
+	// 	Function:     "bin",
+	// 	Query:        "post=true",
+	// 	Retries:      0,
+	// 	MaxRetries:   1,
+	// 	RestartDelay: time.Second * 4,
+	// 	Body:         []byte("body data here."),
+	// 	LastTry:      time.Now(),
+	// }
+	// q.Add(req)
 
 	ticker := time.NewTicker(time.Second * 1)
 
