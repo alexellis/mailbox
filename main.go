@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type WorkQueue struct {
@@ -46,17 +47,14 @@ func NewWorkQueue() WorkQueue {
 func main() {
 	q := NewWorkQueue()
 
-	// sample work item.
-	// req := DeferredRequest{
-	// 	Function:     "bin",
-	// 	Query:        "post=true",
-	// 	Retries:      0,
-	// 	MaxRetries:   1,
-	// 	RestartDelay: time.Second * 4,
-	// 	Body:         []byte("body data here."),
-	// 	LastTry:      time.Now(),
-	// }
-	// q.Add(req)
+	serviceReplicas := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "mailbox_queue_depth",
+			Help: "Mailbox Queue Depth",
+		},
+	)
+
+	prometheus.MustRegister(serviceReplicas)
 
 	ticker := time.NewTicker(time.Second * 1)
 
@@ -64,6 +62,8 @@ func main() {
 	go func() {
 		for t := range ticker.C {
 			fmt.Println(t)
+
+			serviceReplicas.Set(float64(len(*q.Items)))
 			for i, request := range *q.Items {
 				deadline := request.LastTry.Add(request.RestartDelay)
 
@@ -134,6 +134,8 @@ func main() {
 	})
 
 	fmt.Println("Listen and Serve on 8080")
+	r.Handle("/metrics", prometheus.Handler())
+
 	log.Fatalln(http.ListenAndServe(":8080", r))
 }
 
