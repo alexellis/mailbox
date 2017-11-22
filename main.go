@@ -16,6 +16,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+var sendClient *http.Client
+
 type WorkQueue struct {
 	Items *[]DeferredRequest
 	Mutex sync.Mutex
@@ -54,31 +56,33 @@ func main() {
 		},
 	)
 
+	sendClient = &http.Client{}
+
 	prometheus.MustRegister(serviceReplicas)
 
 	ticker := time.NewTicker(time.Second * 1)
 
-	fmt.Println("here")
 	go func() {
-		for t := range ticker.C {
-			fmt.Println(t)
-
+		for range ticker.C {
+			if len(*q.Items) > 0 {
+				log.Printf("[%d] items in mailbox", len(*q.Items))
+			}
 			serviceReplicas.Set(float64(len(*q.Items)))
+
 			for i, request := range *q.Items {
 				deadline := request.LastTry.Add(request.RestartDelay)
+				items := *q.Items
 
-				if time.Now().After(deadline) {
+				if items[i].Sent == false && time.Now().After(deadline) {
 					fmt.Println("Try again")
 
-					item := *q.Items
-					item[i].LastTry = time.Now()
-					item[i].Retries = item[i].Retries + 1
+					items[i].LastTry = time.Now()
+					items[i].Retries = items[i].Retries + 1
 
-					error := submit(&request)
-					if error != nil {
-						item[i].Sent = true
+					statusCode, err := submit(&request)
+					fmt.Printf("Posting [%d] code: %d", i, statusCode)
+					items[i].Sent = (err == nil)
 
-					}
 				}
 			}
 			q.Recompose()
@@ -128,6 +132,7 @@ func main() {
 			Body:         body,
 			LastTry:      time.Now(),
 		}
+
 		q.Add(newReq)
 
 		w.WriteHeader(http.StatusAccepted)
@@ -139,7 +144,7 @@ func main() {
 	log.Fatalln(http.ListenAndServe(":8080", r))
 }
 
-func submit(req *DeferredRequest) error {
+func submit(req *DeferredRequest) (int, error) {
 	gatewayURL := "http://gateway:8080"
 	if val, exists := os.LookupEnv("gateway_url"); exists {
 		gatewayURL = val
@@ -149,24 +154,22 @@ func submit(req *DeferredRequest) error {
 	buf := bytes.NewBuffer(req.Body)
 
 	request, _ := http.NewRequest(http.MethodPost, URI, buf)
-	request.Header.Add("X-Retries", fmt.Sprintf("%d", req.Retries))
+	request.Header.Add("X-Retries", fmt.Sprintf("%d", req.Retries+1))
 	request.Header.Add("X-Max-Retries", fmt.Sprintf("%d", req.MaxRetries))
 	request.Header.Add("X-Delay-Duration", fmt.Sprintf("%d", int64(req.RestartDelay.Seconds())))
 
-	c := http.Client{}
-
-	response, err := c.Do(request)
+	response, err := sendClient.Do(request)
 	if err != nil {
-		log.Printf("Cannot retry %T\n", req)
-		return err
+		return http.StatusGatewayTimeout, fmt.Errorf("cannot retry item %T - error: %s", req, err.Error())
 	} else if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("unexpected status from gateway: %s", response.Status)
+		return response.StatusCode, fmt.Errorf("unexpected status from gateway: %s", response.Status)
 	}
 
-	log.Printf("Posting to %s, status: %s", URI, response.Status)
-	return nil
+	log.Printf("Post to %s, status: %s", URI, response.Status)
+	return response.StatusCode, nil
 }
 
+// DeferredRequest serialized on slice / queue
 type DeferredRequest struct {
 	// Definition
 
