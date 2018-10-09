@@ -36,6 +36,7 @@ http://host:8080/deadletter/<message-type>
 | X-Max-Retries    | Once `X-Retries` meets this value the message will be discarded, you can set this to an effectively infinite number if needed. |
 | X-Delay-Duration | This should be an integer representing how long to wait between resubmitting the work - i.e. `5` for `5 seconds` |
 
+Metrics are exposed though Prometheus by accessing `http://host:8080/_metrics`.
 
 ### Python example
 
