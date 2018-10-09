@@ -1,6 +1,6 @@
 # mailbox
 
-mailbox / dead-letter queue for OpenFaaS using NATS Streaming
+mailbox: a dead-letter queue for NATS Streaming
 
 Use-case: you want to process an asynchronous message but for some reason you cannot do that immediately. A common example may be when working with a remote web API which is rate-limited. This pattern allows for a back-off.
 
